@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Café Sales — Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Navbar -->
+  <nav class="bg-amber-700 text-white p-4 flex justify-between shadow-md">
+    <h1 class="text-xl font-bold">☕ Café Sales Tracker</h1>
+    <div>
+      <a href="index.html" class="px-3 py-1 bg-white text-amber-700 rounded">➕ Add Day</a>
+      <a href="dashboard.html" class="px-3 py-1 bg-white/20 rounded hover:bg-white/30">📊 Dashboard</a>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto p-6">
+    <h2 class="text-2xl font-semibold text-amber-700 mb-6">Sales Dashboard</h2>
+
+    <!-- Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white rounded-2xl shadow p-5 text-center"><p class="text-sm">Revenue (This Month)</p><p id="monthlyRevenue" class="text-3xl font-bold text-amber-700">₹0</p></div>
+      <div class="bg-white rounded-2xl shadow p-5 text-center"><p class="text-sm">Best Seller</p><p id="bestItem" class="text-2xl font-bold text-emerald-600">—</p></div>
+      <div class="bg-white rounded-2xl shadow p-5 text-center"><p class="text-sm">Avg Revenue/Day</p><p id="avgRevenue" class="text-2xl font-bold text-indigo-600">₹0</p></div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-2xl shadow overflow-x-auto mb-8">
+      <table class="min-w-full">
+        <thead class="bg-amber-700 text-white">
+          <tr>
+            <th class="px-4 py-2">Date</th>
+            <th>Bajee</th><th>Black Tea</th><th>Coffee</th><th>Milk Tea</th><th>Samoza</th><th>Green Tea</th>
+            <th>Revenue</th><th>Notes</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="salesTable"></tbody>
+      </table>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white rounded-2xl shadow p-6"><h3>📅 By Weekday</h3><canvas id="weekdayChart"></canvas></div>
+      <div class="bg-white rounded-2xl shadow p-6"><h3>📦 By Month (Items)</h3><canvas id="monthlyItemsChart"></canvas></div>
+      <div class="bg-white rounded-2xl shadow p-6"><h3>💰 Monthly Revenue</h3><canvas id="monthlyRevenueChart"></canvas></div>
+      <div class="bg-white rounded-2xl shadow p-6"><h3>📊 Yearly Revenue</h3><canvas id="yearlyRevenueChart"></canvas></div>
+    </div>
+  </main>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzw7Gbnpiwh4JV5-IWF2gNbv70gxAlVUE",
+      authDomain: "coffee-shop-sales-b49ae.firebaseapp.com",
+      projectId: "coffee-shop-sales-b49ae",
+      storageBucket: "coffee-shop-sales-b49ae.firebasestorage.app",
+      messagingSenderId: "449224431693",
+      appId: "1:449224431693:web:c680e1df75729e22346404"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    async function loadSales(){
+      const snap = await getDocs(collection(db,"daily_sales"));
+      const table = document.getElementById("salesTable");
+      table.innerHTML="";
+      const sales=[];
+
+      snap.forEach(d=>{
+        const data=d.data();
+        sales.push(data);
+        table.innerHTML+=`
+          <tr class="border-b">
+            <td class="px-4 py-2">${data.date_str}</td>
+            <td>${data.items?.Bajee||0}</td>
+            <td>${data.items?.["Black Tea"]||0}</td>
+            <td>${data.items?.Coffee||0}</td>
+            <td>${data.items?.["Milk Tea"]||0}</td>
+            <td>${data.items?.Samoza||0}</td>
+            <td>${data.items?.["Green Tea"]||0}</td>
+            <td>₹${data.totalRevenue||0}</td>
+            <td>${data.notes||""}</td>
+            <td><button onclick="deleteSale('${d.id}')" class="text-red-600">🗑</button></td>
+          </tr>`;
+      });
+      renderSummary(sales); renderCharts(sales);
+    }
+
+    window.deleteSale=async(id)=>{ if(confirm("Delete "+id+"?")){ await deleteDoc(doc(db,"daily_sales",id)); loadSales(); } }
+
+    function renderSummary(sales){
+      const today=new Date(), cm=today.toISOString().slice(0,7);
+      const ms=sales.filter(s=>s.date_str.startsWith(cm));
+      const rev=ms.reduce((sum,s)=>sum+(s.totalRevenue||0),0);
+      const counts={};
+      ms.forEach(s=>{ for(let [k,v] of Object.entries(s.items)){ counts[k]=(counts[k]||0)+v; }});
+      let best="-"; if(Object.keys(counts).length) best=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+      document.getElementById("monthlyRevenue").innerText="₹"+rev;
+      document.getElementById("bestItem").innerText=best;
+      document.getElementById("avgRevenue").innerText=ms.length? "₹"+Math.round(rev/ms.length):"₹0";
+    }
+
+    function renderCharts(docs){
+      const weekdays={Mon:{},Tue:{},Wed:{},Thu:{},Fri:{},Sat:{},Sun:{}}, monthly={}, mrev={}, yrev={};
+      docs.forEach(doc=>{
+        const d=new Date(doc.date_str), wd=d.toLocaleDateString("en-US",{weekday:"short"}), m=doc.date_str.slice(0,7), y=d.getFullYear();
+        for(let [item,qty] of Object.entries(doc.items)){
+          weekdays[wd][item]=(weekdays[wd][item]||0)+qty;
+          monthly[m]=monthly[m]||{}; monthly[m][item]=(monthly[m][item]||0)+qty;
+        }
+        mrev[m]=(mrev[m]||0)+doc.totalRevenue; yrev[y]=(yrev[y]||0)+doc.totalRevenue;
+      });
+
+      const colors={Bajee:"#f59e0b","Black Tea":"#10b981",Coffee:"#3b82f6","Milk Tea":"#8b5cf6",Samoza:"#ef4444","Green Tea":"#22c55e"};
+
+      new Chart(document.getElementById("weekdayChart"),{
+        type:"bar",data:{labels:Object.keys(weekdays),datasets:Object.keys(colors).map(it=>({label:it,data:Object.values(weekdays).map(d=>d[it]||0),backgroundColor:colors[it]}))},
+        options:{responsive:true,scales:{y:{beginAtZero:true}}}
+      });
+      new Chart(document.getElementById("monthlyItemsChart"),{
+        type:"bar",data:{labels:Object.keys(monthly),datasets:Object.keys(colors).map(it=>({label:it,data:Object.values(monthly).map(d=>d[it]||0),backgroundColor:colors[it]}))},
+        options:{responsive:true,scales:{y:{beginAtZero:true}}}
+      });
+      new Chart(document.getElementById("monthlyRevenueChart"),{
+        type:"line",data:{labels:Object.keys(mrev),datasets:[{label:"Revenue",data:Object.values(mrev),borderColor:"#f43f5e",backgroundColor:"rgba(244,63,94,0.2)",fill:true,tension:0.3}]}
+      });
+      new Chart(document.getElementById("yearlyRevenueChart"),{
+        type:"bar",data:{labels:Object.keys(yrev),datasets:[{label:"Revenue",data:Object.values(yrev),backgroundColor:"#3b82f6"}]}
+      });
+    }
+
+    loadSales();
+  </script>
+</body>
+</html>

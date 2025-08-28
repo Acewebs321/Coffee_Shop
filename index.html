@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Café Sales — Daily Entry</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- Navbar -->
+  <nav class="bg-amber-700 text-white p-4 flex justify-between shadow-md">
+    <h1 class="text-xl font-bold">☕ Café Sales Tracker</h1>
+    <div>
+      <a href="index.html" class="px-3 py-1 bg-white text-amber-700 rounded">➕ Add Day</a>
+      <a href="dashboard.html" class="px-3 py-1 bg-white/20 rounded hover:bg-white/30">📊 Dashboard</a>
+    </div>
+  </nav>
+
+  <main class="max-w-3xl mx-auto p-6">
+    <div class="bg-white rounded-2xl shadow-md p-6">
+      <h2 class="text-2xl font-semibold text-amber-700 mb-4">Daily Sales Entry</h2>
+
+      <!-- Rates -->
+      <div class="rounded-xl bg-amber-50 border border-amber-200 p-4 mb-6 text-sm">
+        <p class="font-semibold text-amber-800">Current Rates:</p>
+        <ul class="list-disc list-inside text-amber-900">
+          <li>Bajee: ₹15</li>
+          <li>Black Tea: ₹5</li>
+          <li>Coffee: ₹10</li>
+          <li>Milk Tea: ₹10</li>
+          <li>Samoza: ₹20</li>
+          <li>Green Tea: ₹20</li>
+        </ul>
+      </div>
+
+      <form id="salesForm" class="space-y-4">
+        <div>
+          <label class="block text-gray-700">Date</label>
+          <input id="date" type="date" class="w-full border px-3 py-2 rounded-lg" required>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div><label>Bajee Sold</label><input id="bajeeQty" type="number" min="0" value="0" class="w-full border px-3 py-2 rounded-lg"></div>
+          <div><label>Black Tea Sold</label><input id="blackTeaQty" type="number" min="0" value="0" class="w-full border px-3 py-2 rounded-lg"></div>
+          <div><label>Coffee Sold</label><input id="coffeeQty" type="number" min="0" value="0" class="w-full border px-3 py-2 rounded-lg"></div>
+          <div><label>Milk Tea Sold</label><input id="milkTeaQty" type="number" min="0" value="0" class="w-full border px-3 py-2 rounded-lg"></div>
+          <div><label>Samoza Sold</label><input id="samozaQty" type="number" min="0" value="0" class="w-full border px-3 py-2 rounded-lg"></div>
+          <div><label>Green Tea Sold</label><input id="greenTeaQty" type="number" min="0" value="0" class="w-full border px-3 py-2 rounded-lg"></div>
+        </div>
+
+        <div>
+          <label class="block text-gray-700">Notes (optional)</label>
+          <input id="notes" type="text" class="w-full border px-3 py-2 rounded-lg" placeholder="e.g., Weekend special">
+        </div>
+
+        <div class="bg-gray-50 border rounded-xl p-4 flex justify-between items-center">
+          <p class="text-gray-600">Total Revenue:</p>
+          <p id="grandTotal" class="text-2xl font-bold text-amber-700">₹0</p>
+        </div>
+
+        <div class="flex gap-3">
+          <button type="submit" class="flex-1 bg-amber-700 text-white py-2 rounded-lg hover:bg-amber-800">Save Day</button>
+          <button type="button" id="clearBtn" class="px-4 py-2 rounded-lg border">Clear</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDzw7Gbnpiwh4JV5-IWF2gNbv70gxAlVUE",
+      authDomain: "coffee-shop-sales-b49ae.firebaseapp.com",
+      projectId: "coffee-shop-sales-b49ae",
+      storageBucket: "coffee-shop-sales-b49ae.firebasestorage.app",
+      messagingSenderId: "449224431693",
+      appId: "1:449224431693:web:c680e1df75729e22346404"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const productRates = { Bajee:15, "Black Tea":5, Coffee:10, "Milk Tea":10, Samoza:20, "Green Tea":20 };
+    const fmt = n => "₹" + Number(n).toLocaleString("en-IN");
+
+    const qtyEls = {
+      Bajee: document.getElementById("bajeeQty"),
+      "Black Tea": document.getElementById("blackTeaQty"),
+      Coffee: document.getElementById("coffeeQty"),
+      "Milk Tea": document.getElementById("milkTeaQty"),
+      Samoza: document.getElementById("samozaQty"),
+      "Green Tea": document.getElementById("greenTeaQty")
+    };
+
+    const dateEl = document.getElementById("date");
+    const notesEl = document.getElementById("notes");
+    const totalEl = document.getElementById("grandTotal");
+
+    const today = new Date();
+    dateEl.value = today.toISOString().split("T")[0];
+
+    function recalc(){
+      let total = 0;
+      for (let [item, el] of Object.entries(qtyEls)) {
+        total += (parseInt(el.value)||0) * productRates[item];
+      }
+      totalEl.textContent = fmt(total);
+    }
+    Object.values(qtyEls).forEach(el => el.addEventListener("input", recalc));
+    recalc();
+
+    document.getElementById("clearBtn").addEventListener("click", ()=>{
+      Object.values(qtyEls).forEach(el => el.value=0);
+      notesEl.value=""; recalc();
+    });
+
+    document.getElementById("salesForm").addEventListener("submit", async e=>{
+      e.preventDefault();
+      const date_str = dateEl.value;
+      const items = {};
+      let totalRevenue=0;
+      for (let [item, el] of Object.entries(qtyEls)) {
+        items[item] = parseInt(el.value)||0;
+        totalRevenue += items[item]*productRates[item];
+      }
+      try{
+        await setDoc(doc(db,"daily_sales",date_str),{
+          date_str, items, rates: productRates, totalRevenue,
+          notes: notesEl.value||"", updatedAt: serverTimestamp()
+        },{merge:true});
+        alert("✅ Saved!");
+        window.location.href="dashboard.html";
+      }catch(err){ console.error(err); alert("❌ Error saving"); }
+    });
+  </script>
+</body>
+</html>
